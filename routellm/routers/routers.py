@@ -219,7 +219,7 @@ class MatrixFactorizationRouter(Router):
         text_dim=None,    # Updated to accept text_dim as a parameter
         num_classes=1,
         use_proj=True,
-        use_openai_embeddings=True,         # New parameter
+        use_openai_embeddings=False,         # New parameter
         embedding_model_name=None,          # New parameter
         hf_token=None,  # Add hf_token as a parameter
     ):
