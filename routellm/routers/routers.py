@@ -234,13 +234,13 @@ class MatrixFactorizationRouter(Router):
             if use_openai_embeddings:
                 # Default OpenAI embedding model is 'text-embedding-ada-002'
                 if embedding_model_name is None:
-                    embedding_model_name = "text-embedding-3-small"
+                    embedding_model_name = "text-embedding-ada-002"
                 # OpenAI embeddings have a fixed dimension
                 text_dim = 1536  # Adjust if using a different OpenAI model
             else:
                 # For Hugging Face embeddings, determine text_dim from the model
                 if embedding_model_name is None:
-                    embedding_model_name = 'sentence-transformers/all-MiniLM-L6-v2'
+                    embedding_model_name = 'BAAI/bge-base-en-v1.5'
                 # Load the model to get the embedding dimension
                 tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
                 hf_model = AutoModel.from_pretrained(embedding_model_name)
