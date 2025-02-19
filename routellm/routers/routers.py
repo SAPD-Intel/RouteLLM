@@ -7,7 +7,7 @@ import torch
 from datasets import concatenate_datasets, load_dataset
 from huggingface_hub import hf_hub_download
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
+import logging
 from routellm.routers.causal_llm.configs import RouterModelConfig
 from routellm.routers.causal_llm.llm_utils import (
     load_prompt_format,
@@ -20,6 +20,11 @@ from routellm.routers.similarity_weighted.utils import (
     compute_elo_mle_with_tie,
     compute_tiers,
     preprocess_battles,
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 
@@ -270,6 +275,7 @@ class MatrixFactorizationRouter(Router):
         winrate = self.model.pred_win_rate(
             self.strong_model_id, self.weak_model_id, prompt
         )
+        logging.info(f"[MF Router] Prompt: {prompt[:30]}... | Win rate: {winrate:.4f}")
         return winrate
 
 # Parallelism makes the randomness non deterministic
