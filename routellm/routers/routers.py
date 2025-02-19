@@ -230,7 +230,8 @@ class MatrixFactorizationRouter(Router):
         embedding_model_name=None,          # New parameter
         hf_token=None,  # Add hf_token as a parameter
     ):
-        logger.info("[MF Router] Initializing MatrixFactorizationRouter")
+        logger.info(f"[MF Router] Initializing MatrixFactorizationRouter using checkpoint path: {checkpoint_path}")
+
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Set num_models to the length of MODEL_IDS if not specified

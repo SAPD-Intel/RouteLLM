@@ -6,8 +6,15 @@ from typing import Any, Optional
 import pandas as pd
 from litellm import acompletion, completion
 from tqdm import tqdm
-
+import logging
 from routellm.routers.routers import ROUTER_CLS
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
 
 # Default config for routers augmented using golden label data from GPT-4.
 # This is exactly the same as config.example.yaml.
@@ -61,12 +68,16 @@ class Controller:
         if config is None:
             config = GPT_4_AUGMENTED_CONFIG
 
+        logging.info(f"[Controller] Received router config: {config}")
+
         router_pbar = None
         if progress_bar:
             router_pbar = tqdm(routers)
             tqdm.pandas()
 
         for router in routers:
+            router_kwargs = config.get(router, {})
+            logging.info(f"[Controller] Initializing router '{router}' with kwargs={router_kwargs}")
             if router_pbar is not None:
                 router_pbar.set_description(f"Loading {router}")
             self.routers[router] = ROUTER_CLS[router](hf_token=self.hf_token, **config.get(router, {}))
