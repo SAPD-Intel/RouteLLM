@@ -26,6 +26,8 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logger = logging.getLogger(__name__)
+
 
 
 def no_parallel(cls):
@@ -228,6 +230,7 @@ class MatrixFactorizationRouter(Router):
         embedding_model_name=None,          # New parameter
         hf_token=None,  # Add hf_token as a parameter
     ):
+        logger.info("[MF Router] Initializing MatrixFactorizationRouter")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Set num_models to the length of MODEL_IDS if not specified
@@ -237,25 +240,21 @@ class MatrixFactorizationRouter(Router):
         # Set text_dim based on the embedding model if not specified
         if text_dim is None:
             if use_openai_embeddings:
-                # Default OpenAI embedding model is 'text-embedding-ada-002'
                 if embedding_model_name is None:
                     embedding_model_name = "text-embedding-ada-002"
-                # OpenAI embeddings have a fixed dimension
-                text_dim = 1536  # Adjust if using a different OpenAI model
+                text_dim = 1536  # Fixed dimension for OpenAI embeddings
             else:
-                # For Hugging Face embeddings, determine text_dim from the model
                 if embedding_model_name is None:
                     embedding_model_name = 'BAAI/bge-base-en-v1.5'
-                # Load the model to get the embedding dimension
-                tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
-                hf_model = AutoModel.from_pretrained(embedding_model_name)
-                # Get the embedding dimension from the model's config
+                logger.info(f"[MF Router] Loading HF model for dimension extraction: {embedding_model_name}")
+                tokenizer = AutoTokenizer.from_pretrained(embedding_model_name, token=hf_token)
+                hf_model = AutoModel.from_pretrained(embedding_model_name, token=hf_token)
                 text_dim = hf_model.config.hidden_size
-                # Clean up the model from memory
+                logger.info(f"[MF Router] Determined text_dim from HF model: {text_dim}")
                 del tokenizer
                 del hf_model
 
-        # Initialize the MFModel with the token passed in
+        logger.info(f"[MF Router] Initializing MFModel with hidden_size={hidden_size}, text_dim={text_dim}, num_models={num_models}")
         self.model = MFModel.from_pretrained(
             checkpoint_path,
             dim=hidden_size,
@@ -265,9 +264,10 @@ class MatrixFactorizationRouter(Router):
             use_proj=use_proj,
             use_openai_embeddings=use_openai_embeddings,
             embedding_model_name=embedding_model_name,
-            hf_token=hf_token  # Pass the token here
+            hf_token=hf_token
         )
         self.model = self.model.eval().to(device)
+        logger.info(f"[MF Router] MFModel loaded and set to eval mode on device {device}")
         self.strong_model_id = MODEL_IDS[strong_model]
         self.weak_model_id = MODEL_IDS[weak_model]
 
@@ -275,7 +275,7 @@ class MatrixFactorizationRouter(Router):
         winrate = self.model.pred_win_rate(
             self.strong_model_id, self.weak_model_id, prompt
         )
-        logging.info(f"[MF Router] Prompt: {prompt[:30]}... | Win rate: {winrate:.4f}")
+        logger.info(f"[MF Router] Prompt: {prompt[:30]}... | Computed win rate: {winrate:.4f}")
         return winrate
 
 # Parallelism makes the randomness non deterministic

@@ -2,6 +2,13 @@ import torch
 from huggingface_hub import PyTorchModelHubMixin
 from transformers import AutoTokenizer, AutoModel
 from routellm.routers.similarity_weighted.utils import OPENAI_CLIENT
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 MODEL_IDS = {
     "RWKV-4-Raven-14B": 0,
@@ -80,7 +87,7 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
         text_dim,
         num_classes,
         use_proj,
-        use_openai_embeddings=True,  # Parameter to choose embedding source
+        use_openai_embeddings=False,  # Parameter to choose embedding source
         embedding_model_name=None,  # Name of the embedding model
         hf_token=None,  # Add hf_token as a parameter
     ):
@@ -91,10 +98,13 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
         self.use_openai_embeddings = use_openai_embeddings
         self.hf_token = hf_token 
 
+        # Log which branch will be used for embeddings
         if self.use_openai_embeddings:
             self.embedding_model_name = embedding_model_name or "text-embedding-3-small"
+            logger.info(f"[MFModel] Using OpenAI embeddings with model: {self.embedding_model_name}")
         else:
             self.embedding_model_name = embedding_model_name or "sentence-transformers/all-MiniLM-L6-v2"
+            logger.info(f"[MFModel] Using Hugging Face embeddings with model: {self.embedding_model_name} and hf_token: {hf_token}")
 
         if self.use_proj:
             self.text_proj = torch.nn.Sequential(
@@ -111,33 +121,41 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
 
         if not self.use_openai_embeddings:
             # Initialize Hugging Face tokenizer and model
+            logger.info(f"[MFModel] Loading tokenizer for {self.embedding_model_name}")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.embedding_model_name,
-                use_auth_token=self.hf_token
+                token=hf_token  # Use new parameter name
             )
+            logger.info(f"[MFModel] Loading AutoModel for {self.embedding_model_name}")
             self.embedding_model = AutoModel.from_pretrained(
                 self.embedding_model_name,
-                use_auth_token=self.hf_token
+                token=hf_token  # Use new parameter name
             )
             self.embedding_model.eval() 
             self.embedding_model.to(self.get_device())
+            logger.info(f"[MFModel] Loaded Hugging Face model config: {self.embedding_model.config}")
         else:
             self.embedding_model = None  # Not used for OpenAI embeddings
+
+        logger.info(f"[MFModel] Initialized with dim={dim}, text_dim={text_dim}, num_models={num_models}")
 
     def get_device(self):
         return self.P.weight.device
 
     def get_prompt_embedding(self, prompt):
+        # Log the prompt (or a truncated version)
+        logger.info(f"[MFModel] Getting embedding for prompt: {prompt[:30]}...")
         if self.use_openai_embeddings:
-            # Use OpenAI embeddings
+            logger.info("[MFModel] Using OpenAI embeddings for prompt")
             response = OPENAI_CLIENT.embeddings.create(
                 input=[prompt],
                 model=self.embedding_model_name
             )
             prompt_embed = response.data[0].embedding
             prompt_embed = torch.tensor(prompt_embed, device=self.get_device())
+            logger.info(f"[MFModel] OpenAI embedding shape: {prompt_embed.shape}")
         else:
-            # Use Hugging Face embeddings
+            logger.info("[MFModel] Using Hugging Face embeddings for prompt")
             inputs = self.tokenizer(
                 prompt,
                 padding=True,
@@ -147,28 +165,25 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
             inputs = {k: v.to(self.get_device()) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self.embedding_model(**inputs)
-                # Mean pooling over the token embeddings
                 last_hidden_state = outputs.last_hidden_state
                 prompt_embed = last_hidden_state.mean(dim=1).squeeze()
+            logger.info(f"[MFModel] HF embedding shape: {prompt_embed.shape}")
         return prompt_embed
 
     def forward(self, model_id, prompt):
         model_id = torch.tensor(model_id, dtype=torch.long).to(self.get_device())
-
         model_embed = self.P(model_id)
         model_embed = torch.nn.functional.normalize(model_embed, p=2, dim=1)
-
         prompt_embed = self.get_prompt_embedding(prompt)
-
         if self.use_proj:
             prompt_embed = self.text_proj(prompt_embed)
-
         return self.classifier(model_embed * prompt_embed).squeeze()
 
     @torch.no_grad()
     def pred_win_rate(self, model_a, model_b, prompt):
         logits = self.forward([model_a, model_b], prompt)
         winrate = torch.sigmoid(logits[0] - logits[1]).item()
+        logger.info(f"[MFModel] pred_win_rate for prompt: {prompt[:30]}... = {winrate:.4f}")
         return winrate
 
     def load(self, path):
