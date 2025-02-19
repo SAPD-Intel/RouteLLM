@@ -98,13 +98,16 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
         self.use_openai_embeddings = use_openai_embeddings
         self.hf_token = hf_token 
 
+        logger.info(f"\n\n[MFModel] use_openai_embeddings value: {use_openai_embeddings}\n\n")
+
+
         # Log which branch will be used for embeddings
         if self.use_openai_embeddings:
             self.embedding_model_name = embedding_model_name or "text-embedding-3-small"
             logger.info(f"[MFModel] Using OpenAI embeddings with model: {self.embedding_model_name}")
         else:
             self.embedding_model_name = embedding_model_name or "sentence-transformers/all-MiniLM-L6-v2"
-            logger.info(f"[MFModel] Using Hugging Face embeddings with model: {self.embedding_model_name} and hf_token: {hf_token}")
+            logger.info(f"\n\n[MFModel] Using Hugging Face embeddings with model: {self.embedding_model_name} and hf_token: {hf_token}\n\n")
 
         if self.use_proj:
             self.text_proj = torch.nn.Sequential(
