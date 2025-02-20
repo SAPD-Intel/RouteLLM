@@ -242,7 +242,7 @@ class MatrixFactorizationRouter(Router):
         if text_dim is None:
             if use_openai_embeddings:
                 if embedding_model_name is None:
-                    embedding_model_name = "text-embedding-3-small"
+                    embedding_model_name = "text-embedding-ada-002"
                 text_dim = 1536  # Fixed dimension for OpenAI embeddings
             else:
                 if embedding_model_name is None:
