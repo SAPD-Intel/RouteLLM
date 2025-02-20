@@ -185,9 +185,15 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
     @torch.no_grad()
     def pred_win_rate(self, model_a, model_b, prompt):
         logits = self.forward([model_a, model_b], prompt)
-        winrate = torch.sigmoid(logits[0] - logits[1]).item()
-        logger.info(f"[MFModel] pred_win_rate for prompt: {prompt[:30]}... = {winrate:.4f}")
+        # Calculate the raw difference between the logits
+        raw_diff = logits[0] - logits[1]
+        winrate = torch.sigmoid(raw_diff).item()
+        logger.info(
+            f"[MFModel] For prompt: '{prompt[:30]}...', logits: {[float(x) for x in logits]}, "
+            f"raw difference: {raw_diff:.4f}, winrate (sigmoid): {winrate:.4f}"
+        )
         return winrate
+
 
     def load(self, path):
         self.load_state_dict(torch.load(path))
