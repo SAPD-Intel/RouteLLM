@@ -7,7 +7,7 @@ import torch
 from datasets import concatenate_datasets, load_dataset
 from huggingface_hub import hf_hub_download
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-import logging
+
 from routellm.routers.causal_llm.configs import RouterModelConfig
 from routellm.routers.causal_llm.llm_utils import (
     load_prompt_format,
@@ -21,13 +21,13 @@ from routellm.routers.similarity_weighted.utils import (
     compute_tiers,
     preprocess_battles,
 )
+import logging
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-
 
 
 def no_parallel(cls):
@@ -218,44 +218,47 @@ class MatrixFactorizationRouter(Router):
     def __init__(
         self,
         checkpoint_path,
-        # Model pair for scoring at inference time
         strong_model="gpt-4-1106-preview",
         weak_model="mixtral-8x7b-instruct-v0.1",
         hidden_size=128,
-        num_models=None,  # Updated to allow specifying num_models
-        text_dim=None,    # Updated to accept text_dim as a parameter
+        num_models=None,
+        text_dim=None,
         num_classes=1,
         use_proj=True,
-        use_openai_embeddings=False,         # New parameter
-        embedding_model_name=None,          # New parameter
-        hf_token=None,  # Add hf_token as a parameter
+        use_openai_embeddings=True,
+        embedding_model_name=None,
+        hf_token=None,
     ):
-        logger.info(f"[MF Router] Initializing MatrixFactorizationRouter using checkpoint path: {checkpoint_path}")
-
+        """
+        A simplified constructor that flattens the logic for:
+          1) Setting num_models from MODEL_IDS,
+          2) Determining embedding_model_name defaults,
+          3) Setting text_dim for OpenAI vs. HF embeddings,
+          4) Initializing the MFModel,
+          5) Setting strong/weak model IDs.
+        """
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # Set num_models to the length of MODEL_IDS if not specified
-        if num_models is None:
-            num_models = len(MODEL_IDS)
 
-        # Set text_dim based on the embedding model if not specified
+        # Default num_models to the length of MODEL_IDS if not provided
+        num_models = num_models or len(MODEL_IDS)
+
+        # Decide which embedding model_name to use if none provided
+        if not embedding_model_name:
+            if use_openai_embeddings:
+                # e.g. "text-embedding-ada-002" or your default
+                embedding_model_name = "text-embedding-3-small"
+            else:
+                embedding_model_name = "BAAI/bge-base-en"
+
+        # Decide text_dim if not provided
         if text_dim is None:
             if use_openai_embeddings:
-                if embedding_model_name is None:
-                    embedding_model_name = "text-embedding-ada-002"
-                text_dim = 1536  # Fixed dimension for OpenAI embeddings
+                # e.g., 1536 for text-embedding-ada-002
+                text_dim = 1536
             else:
-                if embedding_model_name is None:
-                    embedding_model_name = 'BAAI/bge-base-en-v1.5'
-                logger.info(f"[MF Router] Loading HF model for dimension extraction: {embedding_model_name}")
-                tokenizer = AutoTokenizer.from_pretrained(embedding_model_name, token=hf_token)
-                hf_model = AutoModel.from_pretrained(embedding_model_name, token=hf_token)
-                text_dim = hf_model.config.hidden_size
-                logger.info(f"[MF Router] Determined text_dim from HF model: {text_dim}")
-                del tokenizer
-                del hf_model
+                text_dim = self._infer_hf_text_dim(embedding_model_name)
 
-        logger.info(f"[MF Router] Initializing MFModel with hidden_size={hidden_size}, text_dim={text_dim}, num_models={num_models}")
+        # Initialize the MFModel
         self.model = MFModel.from_pretrained(
             checkpoint_path,
             dim=hidden_size,
@@ -265,19 +268,42 @@ class MatrixFactorizationRouter(Router):
             use_proj=use_proj,
             use_openai_embeddings=use_openai_embeddings,
             embedding_model_name=embedding_model_name,
-            hf_token=hf_token
-        )
-        self.model = self.model.eval().to(device)
-        logger.info(f"[MF Router] MFModel loaded and set to eval mode on device {device}")
+            hf_token=hf_token,
+        ).eval().to(device)
+
+        # Store strong/weak model IDs
         self.strong_model_id = MODEL_IDS[strong_model]
         self.weak_model_id = MODEL_IDS[weak_model]
 
+    @staticmethod
+    def _infer_hf_text_dim(embedding_model_name: str) -> int:
+        """
+        Helper to load a huggingface model and extract its hidden size.
+        Immediately frees model from memory.
+        """
+        tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
+        hf_model = AutoModel.from_pretrained(embedding_model_name)
+        dim = hf_model.config.hidden_size
+
+        del tokenizer
+        del hf_model
+
+        return dim
+
     def calculate_strong_win_rate(self, prompt):
+        """
+        Scores the prompt using the MF model to see how
+        often the 'strong' model is predicted to win
+        over the 'weak' model.
+        """
         winrate = self.model.pred_win_rate(
-            self.strong_model_id, self.weak_model_id, prompt
+            self.strong_model_id, 
+            self.weak_model_id, 
+            prompt
         )
-        logger.info(f"[MF Router] Prompt: {prompt[:30]}... | Computed win rate: {winrate:.4f}")
+        logger.info(f"\n\nwinrate: {winrate}\n\n")
         return winrate
+
 
 # Parallelism makes the randomness non deterministic
 @no_parallel
