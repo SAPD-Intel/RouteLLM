@@ -248,7 +248,7 @@ class MatrixFactorizationRouter(Router):
                 # e.g. "text-embedding-ada-002" or your default
                 embedding_model_name = "text-embedding-3-small"
             else:
-                embedding_model_name = "BAAI/bge-base-en"
+                raise ValueError("Missing model id in config file. Please add a valid model id")
 
         # Decide text_dim if not provided
         if text_dim is None:
@@ -301,7 +301,6 @@ class MatrixFactorizationRouter(Router):
             self.weak_model_id, 
             prompt
         )
-        logger.info(f"\n\nwinrate: {winrate}\n\n")
         return winrate
 
 

@@ -9,24 +9,6 @@ from tqdm import tqdm
 
 from routellm.routers.routers import ROUTER_CLS
 
-# Default config for routers augmented using golden label data from GPT-4.
-# This is exactly the same as config.example.yaml.
-GPT_4_AUGMENTED_CONFIG = {
-    "sw_ranking": {
-        "arena_battle_datasets": [
-            "lmsys/lmsys-arena-human-preference-55k",
-            "routellm/gpt4_judge_battles",
-        ],
-        "arena_embedding_datasets": [
-            "routellm/arena_battles_embeddings",
-            "routellm/gpt4_judge_battles_embeddings",
-        ],
-    },
-    "causal_llm": {"checkpoint_path": "routellm/causal_llm_gpt4_augmented"},
-    "bert": {"checkpoint_path": "routellm/bert_gpt4_augmented"},
-    "mf": {"checkpoint_path": "madison-evans/routellm_all-MiniLM-L6-v2"},
-}
-
 
 class RoutingError(Exception):
     pass
@@ -59,7 +41,7 @@ class Controller:
         self.progress_bar = progress_bar
 
         if config is None:
-            config = GPT_4_AUGMENTED_CONFIG
+            raise ValueError("Config cannot be None. Please provide a valid configuration dictionary.")
 
         router_pbar = None
         if progress_bar:

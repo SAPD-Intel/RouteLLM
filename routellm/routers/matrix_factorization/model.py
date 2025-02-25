@@ -125,7 +125,6 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
 
     def get_prompt_embedding(self, prompt):
         """Generate sentence embedding using mean pooling (matches notebook)."""
-        logger.info(f"Generating embedding for prompt: {prompt[:30]}...")
         
         inputs = self.tokenizer(
             prompt,
@@ -159,10 +158,6 @@ class MFModel(torch.nn.Module, PyTorchModelHubMixin):
         logits = self.forward([model_a, model_b], prompt)
         raw_diff = logits[0] - logits[1]
         winrate = torch.sigmoid(raw_diff).item()
-        logger.info(
-            f"For prompt: '{prompt[:30]}...', logits: {[float(x) for x in logits]}, "
-            f"raw difference: {raw_diff:.4f}, winrate (sigmoid): {winrate:.4f}"
-        )
         return winrate
 
     def load(self, path):
